@@ -1,0 +1,31 @@
+Data_points : 2Data_points : 1
+variable None Wheelhead Bearing {
+type discrete[2] { Up , Down };
+variable Cause Wheelhead {
+type discrete[2] { Up , Down };
+variable None Workhead Bearing {
+type discrete[2] { Up , Down  };
+variable Cause Workhead {
+type discrete[2] { Up , Down };
+variable Symptom Noise {
+type discrete[2] { Present , Absent };
+probability ( Wheelhead ) { 
+	table 0.5500 0.4500 ;
+probability ( Workhead ) { 
+	table 0.2000 0.8000 ;
+probability ( Wheelhead Bearing , Wheelhead ) { 
+	table 0.5500 0.4500 0.0000 8589934592.0000 ;
+probability ( Workhead Bearing , Workhead ) { 
+	table 0.2000 0.8000 0.0000 8589934592.0000 ;
+probability ( Noise , Wheelhead Bearing , Workhead Bearing ) { 
+	table 0.1200 0.3500 0.7900 0.9700 0.8800 0.5500 0.2100 0.0300 ;
+Cases ( Wheelhead ) { 
+	table 1 0 ;
+Cases ( Workhead ) { 
+	table 0 1 ;
+Cases ( Wheelhead Bearing , Wheelhead ) { 
+	table 1 0 0 1342177280 ;
+Cases ( Workhead Bearing , Workhead ) { 
+	table 0 1 0 1342177280 ;
+Cases ( Noise , Wheelhead Bearing , Workhead Bearing ) { 
+	table 0 0 1 0 0 0 0 0 ;

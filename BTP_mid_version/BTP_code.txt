@@ -1,0 +1,1060 @@
+//
+//  main.cpp
+//  BTP_code
+//
+//  Created by Pranit Arora on 15/11/15.
+//  Copyright (c) 2015 Pranit Arora. All rights reserved.
+//
+
+#include <iostream>
+#include <string>
+#include <vector>
+#include <list>
+#include <fstream>
+#include <sstream>
+#include <cstdlib>
+#include <cmath>
+#include <algorithm>
+#include <iterator>
+#include <iomanip>
+#include <time.h>
+#include <map>
+#include <stdlib.h>
+using namespace std;
+typedef long long ll;
+typedef vector<int> vi;
+typedef vector<long long> vll;
+typedef vector<double> vd;
+typedef vector<float> vf;
+typedef vector<string> vs;
+typedef vector<vi> vvi;
+typedef pair<int,int> ii;
+typedef pair<ll,ll> pll;
+typedef vector< pair<int,int> > vii;
+#define debug(x) cout << #x << " = " << x << endl
+#define sz(a) int((a).size())
+#define pb push_back
+#define all(c) (c).begin(),(c).end()
+#define tr(c,i) for(typeof((c).begin()) i = (c).begin(); i != (c).end(); i++)
+#define For(i,a,b) for(int i=a;i<=b;i++)
+#define present(c,x) ((c).find(x) != (c).end())      // for set/map
+#define cpresent(c,x) (find(all(c),x) != (c).end())  //for vector
+
+
+int Num_Loops = 100;
+int Num_DP;
+float Weight = 0;
+
+// Format checker just assumes you have Alarm.bif and Solved_Alarm.bif (your file) in current directory
+using namespace std;
+
+// Our graph consists of a list of nodes where each node is represented as follows:
+class Graph_Node{
+    
+private:
+    string Node_Name;  // Variable name
+    vector<int> Children; // Children of a particular node - these are index of nodes in graph.
+    vector<string> Parents; // Parents of a particular node- note these are names of parents
+    int nvalues;  // Number of categories a variable represented by this node can take
+    vector<string> values; // Categories of possible values
+    int nparams;
+    vector<float> CPT; // conditional probability table as a 1-d array . Look for BIF format to understand its meaning
+    vector<int> Num_Cases;
+public:
+    // Constructor- a node is initialised with its name and its categories
+    Graph_Node(string name,int n,vector<string> vals)
+    {
+        Node_Name=name;
+        
+        nvalues=n;
+        values=vals;
+    }
+    string get_name()
+    {
+        return Node_Name;
+    }
+    vector<int> get_children()
+    {
+        return Children;
+    }
+    vector<string> get_Parents()
+    {
+        return Parents;
+    }
+    vector<float> get_CPT()
+    {
+        return CPT;
+    }
+    vector<int> get_num_cases()
+    {
+        return Num_Cases;
+    }
+    int get_nvalues()
+    {
+        return nvalues;
+    }
+    int get_nparams()
+    {
+        return nparams;
+    }
+    void set_nparams(int value)
+    {
+        nparams = value;
+    }
+    vector<string> get_values()
+    {
+        return values;
+    }
+    void set_CPT(vector<float> new_CPT)
+    {
+        CPT.clear();
+        CPT=new_CPT;
+    }
+    void set_num_cases(vector<int> new_cases)
+    {
+        Num_Cases.clear();
+        Num_Cases = new_cases;
+    }
+    void set_Parents(vector<string> Parent_Nodes)
+    {
+        Parents.clear();
+        Parents=Parent_Nodes;
+    }
+    // add another node in a graph as a child of this node
+    int add_child(int new_child_index )
+    {
+        for(int i=0;i<Children.size();i++)
+        {
+            if(Children[i]==new_child_index)
+                return 0;
+        }
+        Children.push_back(new_child_index);
+        return 1;
+    }
+    
+};
+
+// The whole network represted as a list of nodes
+class network{                                      //Bayesian Network
+    
+    list <Graph_Node> Pres_Graph;                   // Present Graph
+    
+public:
+    int addNode(Graph_Node node)
+    {
+        Pres_Graph.push_back(node);
+        return 0;
+    }
+    int netSize()
+    {
+        return Pres_Graph.size();
+    }
+    // get the index of node with a given name
+    int get_index(string val_name)
+    {
+        list<Graph_Node>::iterator listIt;
+        int count=0;
+        for(listIt=Pres_Graph.begin();listIt!=Pres_Graph.end();listIt++)
+        {
+            if(listIt->get_name().compare(val_name)==0)
+                return count;
+            count++;
+        }
+        return -1;
+    }
+    // get the node at nth index
+    list<Graph_Node>::iterator get_nth_node(int n)
+    {
+        list<Graph_Node>::iterator listIt;
+        int count=0;
+        for(listIt=Pres_Graph.begin();listIt!=Pres_Graph.end();listIt++)
+        {
+            if(count==n)
+                return listIt;
+            count++;
+        }
+        return listIt;
+    }
+    //get the iterator of a node with a given name
+    list<Graph_Node>::iterator search_node(string val_name)
+    {
+        list<Graph_Node>::iterator listIt;
+        for(listIt=Pres_Graph.begin();listIt!=Pres_Graph.end();listIt++)
+        {
+            if(listIt->get_name().compare(val_name)==0)
+                return listIt;
+        }
+        cout<<"node not found\n";
+        return listIt;
+    }
+};
+
+int nvars,nlines;
+bool equal(vs &as, vs &ds) // order of arguments is important, it is assignments, dataset
+{
+    
+    For(i, 0, nvars -1)
+    {
+        if(as[i].compare("") == 0) continue; // don't care
+        if(as[i].compare(ds[i]) != 0) return false; // takes into account the case when elements of ds are missing
+    }
+    return true;
+}
+clock_t tStart;
+
+//  Used
+int countNum(vector<vs> &dataset, int index, string Value) // returns the number of instances in the dataset according to assignments
+{
+    // size of assignments is nvars
+    int count  = 0;
+    For(i, 0, sz(dataset) - 1)
+    {
+        if(Value.compare(dataset[i][index])==0)
+            count ++;
+    }
+    return count;
+}
+//Used
+vs SetOtherCausesFalse (vs DataPoint, network Alarm, vs Parents)
+{
+    for(int i=0;i<Parents.size();i++)
+    {
+        
+        int index = Alarm.get_index(Parents[i]);
+        if (DataPoint[index].compare("\"?\"")==0)
+        {
+            list<Graph_Node>::iterator Node = Alarm.search_node(Parents[i]);
+            DataPoint[index] = Node->get_values()[0];
+        }
+    }
+    return DataPoint;
+}
+
+
+
+//Used
+vs Most_Likely_DP(vs DataPoint, vector<vs> SampleSet, network Alarm)
+{
+    for (int i=0;i<DataPoint.size();i++)
+    {
+        if(DataPoint[i].compare("\"?\"")==0)
+        {
+            list<Graph_Node>::iterator MyNode = Alarm.get_nth_node(i);
+            float MaxProb =0;
+            int val;
+            for(int j=0;j<MyNode->get_nvalues();j++)
+            {
+                float Num; int Den;
+                float Prob;
+                //Prob = calcProb(Alarm, DataPoint, Alarm.search_node(Parents[i]))[0];
+                
+                Num = countNum(SampleSet, i, MyNode->get_values()[j]) + 1.0;
+                Den = Num_Loops + MyNode->get_nvalues();
+                Prob = float(Num/Den);
+                if(Prob>MaxProb)
+                {
+                    MaxProb =Prob;
+                    val = j;
+                }
+            }
+            DataPoint[i] = MyNode->get_values()[val];
+        }
+    }
+    return DataPoint;
+}
+
+
+//Used
+vector<float> calcProb(network &MyNet, vs &DataPoint, list<Graph_Node>::iterator MyIt)
+{
+    cout<<MyIt->get_name()<<" ";
+    for(int i=0;i<DataPoint.size();i++)
+    {
+        cout<<DataPoint[i]<<" ";
+    }
+    cout<<endl;
+    
+    string MyVar = MyIt->get_name();
+    vector<float> MyProb(MyIt->get_nvalues(),0);    //Prob. array for MyIt
+    float sumProb = 0.0;
+    int nvals = MyIt->get_nvalues();
+    vs values = MyIt->get_values();
+    vs MyParents = MyIt->get_Parents();
+    vi MyChildren = MyIt->get_children();
+    vector<float> MyCPT = MyIt->get_CPT();
+    
+    //Get Parent indices
+    vi MyParentsIndex;
+    for (int i=0; i<MyParents.size(); i++)
+    {
+        string MyPARA = MyParents[i];
+        MyParentsIndex.push_back( MyNet.get_index(MyParents[i]));
+    }
+    
+    //Calc to make P(Y|Parents(Y)) easier
+    int ChildSize = MyChildren.size();
+    vector<vector<float> > ChildCPT(ChildSize); //stores CPT of all children
+    vector<int> ChildBaseline(ChildSize,0);
+    vector<int> ChildAdder(ChildSize,1);
+    vector<bool> ChildLast(ChildSize,false);
+    vi ChildTotalPar(ChildSize, 0);
+    for(int i=0;i<ChildSize;i++)                            //for each child
+    {
+        list<Graph_Node>::iterator ChildIt = MyNet.get_nth_node(MyChildren[i]), ParentIt;
+        ChildCPT[i] = ChildIt->get_CPT();
+        vs ChildPar = ChildIt->get_Parents();   //all parents of the children
+        bool Found = false, disable= true;
+        int TotalParVals = 1;
+        for (int j=0; j<ChildPar.size(); j++)
+        {
+            ParentIt = MyNet.search_node(ChildPar[j]);
+            TotalParVals *= ParentIt->get_nvalues();
+            vs ParVals = ParentIt->get_values();
+            int k;
+            if(ChildPar[j].compare(MyVar)==0)
+            {
+                k=0;
+                Found=true;
+            }
+            else    //for non MyIt parents of the child node
+            {
+                for( k=0;k<ParentIt->get_nvalues();k++)
+                {
+                    int indexss = MyNet.get_index(ParentIt->get_name());    //index of parent
+                    string valss = DataPoint[indexss];  //value of parent in datapoint
+                    string Parvalss = ParVals[k];
+                    if(ParVals[k].compare(DataPoint[MyNet.get_index(ParentIt->get_name())])==0)
+                    {
+                        break;          //k = required value
+                    }
+                }
+            }
+            if(Found)
+            {
+                
+                if(disable)
+                {
+                    disable=false;
+                }
+                else    //if !disable
+                {
+                    ChildAdder[i] = ParentIt->get_nvalues()* ChildAdder[i] ;          //for child i, childadder *=Parent_nvalues
+                }
+            }
+            ChildBaseline[i] = ParentIt->get_nvalues()*ChildBaseline[i] + k;       //
+        }
+        
+        int k;
+        for( k=0;k<ChildIt->get_nvalues();k++)
+        {
+            int indexss = MyChildren[i];
+            string valss = DataPoint[indexss];
+            
+            vs Childvalss = ChildIt->get_values();
+            string  Childdsss= Childvalss[k];
+            if(Childvalss[k].compare(DataPoint[MyChildren[i]])==0)  // k is index in Child's values that is the same as datapoint
+            {
+                break;          //k = required value
+            }
+        }
+        if(k==ChildIt->get_nvalues()-1)         //Note: Due to storage of prob., diff. treatment if we have last value
+        {
+            ChildLast[i] = true;
+        }
+        ChildTotalPar[i] = TotalParVals;
+        ChildBaseline[i] += TotalParVals* k;
+        
+    }
+    
+    //Calc Offset (CPTindex)needed to find P(X|Parents(X))
+    list<Graph_Node>::iterator ParentIt;
+    int CPTindex = 0;
+    for (int j=0; j<MyParents.size(); j++)
+    {
+        ParentIt = MyNet.get_nth_node(MyParentsIndex[j]);
+        vs ParVals = ParentIt->get_values();
+        int k;
+        for( k=0;k<ParentIt->get_nvalues();k++)
+        {
+            if(ParVals[k].compare(DataPoint[MyParentsIndex[j]])==0)
+            {
+                break;          //k = required value
+            }
+        }
+        CPTindex = ParentIt->get_nvalues()*CPTindex + k;
+    }
+    
+    float MyProbC= 0.0;
+    //For all poss values of X
+    for(int i=0;i<nvals;i++)
+    {
+        MyProb[i] = MyCPT[i* (MyIt->get_nparams()/(nvals -1)) + CPTindex];
+        cout<<"\n s"<<MyProb[i];
+        
+        if(i==nvals-1)
+        {
+            MyProb[i] = 1- MyProbC;
+        }
+        MyProbC += MyProb[i];
+        
+        //Right Now, MyProb[i] = P(X | Par(X)
+        //for each child
+        for(int j=0;j<ChildSize;j++)
+        {
+            //calc P(Y|Par)
+            if(ChildLast[j]==false)
+            {
+                float ChildProb = ChildCPT[j][ChildBaseline[j]+ i* ChildAdder[j]];
+                MyProb[i] *= ChildProb;
+                cout<<"*"<<ChildProb;
+            }
+            else
+            {
+                float ChildProbC = 0.0;
+                list<Graph_Node>::iterator ChildIt = MyNet.get_nth_node(MyChildren[j]);
+                cout<<"elsing ";
+                for(int k=1;k<ChildIt->get_nvalues();k++)
+                {
+                    ChildProbC += ChildCPT[j][ChildBaseline[j]+ i* ChildAdder[j] - k* (ChildTotalPar[j])];
+                    cout<<"k"<<k<<" "<<ChildCPT[j][ChildBaseline[j]+ i* ChildAdder[j] - k* (ChildTotalPar[j])];
+                    //IS NPARAMS = TotalParVals (ChildTotalPar)
+                }
+                
+                MyProb[i]*= (1-ChildProbC);
+                cout<<"*"<<1-ChildProbC;
+            }
+        }
+        sumProb += MyProb[i];
+        
+    }
+    //Normalise
+    for(int i=0;i<nvals;i++)
+    {
+        MyProb[i] = MyProb[i] /sumProb;
+    }
+    cout<<"end\n";
+    return MyProb;
+}
+
+
+
+
+//Used
+int select_event(vf probs)
+{
+    float val = (float)rand() / RAND_MAX;
+    int n = sz(probs);
+    vf sum(n+1);
+    For(i,1,n)
+    {
+        sum[i] = sum[i-1] + probs[i-1];
+    }
+    int random = 0;
+    For(i, 1, n)
+    {
+        if(val <= sum[i]){
+            
+            random =  (i - 1);
+            break;
+        }
+    }
+    return random;
+}
+
+
+//Used
+vector<vs> ProbabiltyEst (network &MyNet, vs &DataPoint)
+{
+    
+    //Not sure about this, but it iterates through all datapoints and finds the prob dist of the ? var
+    vector<vector<string>> newdataset(1000, vector<string>(DataPoint.size()));
+    list<Graph_Node>::iterator MyIt;
+    vs CurrDataPoint = DataPoint;
+    int CDPi;
+    for(int ind=0;ind<nvars;ind++)
+    {
+        if(DataPoint[ind].compare("\"?\"")==0)
+        {
+            MyIt = MyNet.get_nth_node(ind);
+            CDPi = rand() % MyIt->get_nvalues();
+            CurrDataPoint[ind] = MyIt->get_values()[CDPi];
+        }
+    }
+    
+    for(int i=1;i<Num_Loops;i++)
+    {
+        int j = rand() % nvars;
+        while (DataPoint[j].compare("\"?\"")!=0)
+        {
+            j = rand() % nvars;
+        }
+        
+        MyIt = MyNet.get_nth_node(j);
+        //index = j;
+        vf ProbQuestVar = calcProb(MyNet, CurrDataPoint, MyIt);
+        string value = MyIt->get_values()[select_event(ProbQuestVar)];
+        CurrDataPoint[j] = value;
+        newdataset[i] = CurrDataPoint;
+        
+    }
+    return newdataset;
+    
+}
+//Used. SET properly
+void setWeight(int Numcases)
+{
+    if(Numcases< 10)
+    {
+        Weight = float(Numcases) /(10+ 2.0*float(Numcases));
+    }
+    else if (Numcases<100)
+    {
+        Weight = 0.25 + float(Numcases) /(100+ float(Numcases));
+    }
+    else
+    {
+        Weight = 0.6 + 0.4 * float(Numcases) /(1000+ float(Numcases));
+    }
+}
+
+void write_network(network Alarm, vs DataPoint)
+{
+    ifstream infile("/Users/PranitArora/Desktop/Cleanup/DataTestCase.txt");
+    ofstream outfile("/Users/PranitArora/Desktop/Cleanup/SolvedTestCase.txt");
+    int currlines = 0;
+    string line,temp;
+    if (infile.is_open())
+    {
+        while (! infile.eof() )
+        {
+            stringstream ss;
+            getline (infile,line);
+            if(line.empty()) continue;
+            ss.str(line);
+            ss>>temp;
+            if(temp.compare("Data_points")==-0)
+            {
+                outfile<<"Data_points : "<<Num_DP+1;
+            }
+            if(temp.compare("probability") == 0)
+            {
+                ss >> temp;
+                ss >> temp;
+                list<Graph_Node>::iterator listIt;
+                listIt=Alarm.search_node(temp);
+                outfile << line << "\n";
+                getline (infile,line);
+                stringstream ss2;
+                outfile << "\t";
+                ss2.str(line);
+                ss2>> temp;
+                outfile <<temp;
+                vector<float> curr_CPT = listIt->get_CPT();
+                ss2>> temp;
+                int i = 0;
+                while(temp.compare(";")!=0)
+                {
+                    
+                    outfile << " "<< fixed<<setprecision(4)<<curr_CPT[i++];
+                    ss2>>temp;
+                }
+                outfile<< " " << temp << "\n";
+            }
+            else if(temp.compare("Cases") == 0)
+            {
+                ss >> temp;
+                ss >> temp;
+                list<Graph_Node>::iterator listIt;
+                listIt=Alarm.search_node(temp);
+                outfile << line << "\n";
+                getline (infile,line);
+                stringstream ss2;
+                outfile << "\t";
+                ss2.str(line);
+                ss2>> temp;
+                outfile <<temp;
+                vector<int> curr_cases = listIt->get_num_cases();
+                ss2>> temp;
+                int i = 0;
+                while(temp.compare(";")!=0)
+                {
+                    
+                    outfile << " "<< fixed<<setprecision(4)<<curr_cases[i++];
+                    ss2>>temp;
+                }
+                outfile<< " " << temp << "\n";
+            }
+
+            else
+            {
+                outfile << line << "\n";
+            }
+        }
+    }
+}
+
+
+network update_CPT(network Alarm, vs DataPoint)
+{
+    vector<int> CurrIndices(DataPoint.size(), -1);
+    for(int i=0; i<nvars; i++)
+    {
+        list<Graph_Node>::iterator Node = Alarm.get_nth_node(i);
+        vs Parents = Node->get_Parents();
+        int CPT_Ind=0;
+        int cpt_size=1;
+        for(int j=Parents.size()-1;j>=0;j--)
+        {
+            list<Graph_Node>::iterator Parent_Node = Alarm.search_node(Parents[j]);
+            int Parent_index = Alarm.get_index(Parents[j]);
+            if(CurrIndices[Parent_index]==-1)
+            {
+                vs Parent_values = Parent_Node->get_values();
+                for(int k=0;k<Parent_values.size();k++)
+                {
+                    if(DataPoint[Parent_index].compare(Parent_values[k])==0)
+                    {
+                        CurrIndices[Parent_index] = k;
+                    }
+                }
+            }
+            else
+            {
+                //Do Nothing
+            }
+            CPT_Ind += cpt_size*CurrIndices[Parent_index];
+            cpt_size *= Parent_Node->get_nvalues();
+            
+        }
+        vector<int> New_cases = Node->get_num_cases();
+        vector<float> New_CPT =Node->get_CPT();
+        vs Node_Values = Node->get_values();
+        for(int l=0;l<Node->get_nvalues();l++)
+        {
+            New_CPT[CPT_Ind] = New_CPT[CPT_Ind]* New_cases[CPT_Ind] ;
+            if(DataPoint[i].compare(Node_Values[l])==0)
+            {
+                New_CPT[CPT_Ind]++;
+                CurrIndices[i] = l;
+            }
+            New_cases[CPT_Ind]++;
+            New_CPT[CPT_Ind] /=New_cases[CPT_Ind];
+            CPT_Ind+=cpt_size;
+        }
+        
+        Node->set_CPT(New_CPT);
+        Node->set_num_cases(New_cases);
+    }
+    
+    return Alarm;
+    
+}
+
+
+void write_cases(network Alarm, vs DataPoint)
+{
+    ofstream outfile;
+    outfile.open("/Users/PranitArora/Desktop/Cleanup/AllCases.txt", std::ios_base::app);
+    for (int i=0;i<DataPoint.size();i++)
+    {
+        outfile<<DataPoint[i]<<" ";
+    }
+    outfile<<endl;
+}
+
+
+network read_network(vs &Causes, vs &Symptoms, bool Data_Taken, network Alm, string FileName)
+{
+    network Alarm;
+    if(Data_Taken)
+    {
+        Alarm = Alm;
+    }
+    string line;
+    int find=0;
+    ifstream myfile(FileName);
+    string temp;
+    string name,n2="", type;
+    int params;
+    vector<string> values;
+    
+    if (myfile.is_open())
+    {
+        while (! myfile.eof() )
+        {
+            stringstream ss;
+            getline (myfile,line);
+            string Ntext;
+            ss.str(line);
+            ss>>temp;
+            if(temp.compare("Data_points")==0)
+            {
+                ss>>Ntext;
+                ss>>Ntext;
+                //Num_DP = Convert.ToInt32(Ntext);
+                Num_DP = stoi(Ntext);
+                
+                setWeight(Num_DP);
+            }
+            else if(temp.compare("variable")==0 && !Data_Taken)
+            {
+                ss>>type;
+                ss>>name;
+                ss>>n2;
+                while (n2.compare("{"))
+                {
+                    name.append(" ");
+                    name.append(n2);
+                    ss>>n2;
+                }
+                
+                if(type.compare("Cause")==0)
+                {
+                    Causes.push_back(name);
+                }
+                else if (type.compare("Symptom")==0)
+                {
+                    Symptoms.push_back(name);
+                }
+                getline (myfile,line);
+                
+                stringstream ss2;
+                ss2.str(line);
+                for(int i=0;i<4;i++)
+                {
+                    ss2>>temp;
+                }
+                //string n2="";
+                values.clear();
+                while(temp.compare("};")!=0 && n2.compare("};")!=0)
+                {
+                    ss2>>n2;
+                    while (n2.compare(",")!=0 && n2.compare("};")!=0)
+                    {
+                        temp.append(" ");
+                        temp.append(n2);
+                        ss2>>n2;
+                    }
+                    values.push_back(temp);
+                    if(n2.compare("};")==0)
+                    {
+                        break;
+                    }
+                    ss2>>temp;
+                }
+                Graph_Node new_node(name,values.size(),values);
+                int pos=Alarm.addNode(new_node);
+                
+            }
+            else if(temp.compare("probability")==0)
+            {
+                ss>>temp;
+                ss>>temp;
+                ss>>n2;
+                while ( n2[0] != ')'  && n2[0]!= ',')
+                {
+                    temp.append(" ");
+                    temp.append(n2);
+                    ss>>n2;
+                }
+                int nparams;
+                list<Graph_Node>::iterator listIt;
+                list<Graph_Node>::iterator listIt1;
+                listIt=Alarm.search_node(temp);
+                nparams = (listIt->get_nvalues() - 1);
+                int index=Alarm.get_index(temp);
+                //ss>>temp;
+                temp = n2;
+                values.clear(); // here values are actually parent nodes.
+                while(temp.compare(")")!=0)
+                {
+                    ss>>temp;
+                    ss>>n2;
+                    while(n2[0] != ',' && n2[0] != ')')
+                    {
+                        temp.append(" ");
+                        temp.append(n2);
+                        ss>>n2;
+                    }
+                    listIt1=Alarm.search_node(temp);
+                    listIt1->add_child(index);
+                    nparams *= listIt1->get_nvalues();
+                    values.push_back(temp);
+                    if(n2.compare(","))
+                        break;
+                }
+                listIt->set_Parents(values);
+                listIt->set_nparams(nparams);
+                getline (myfile,line);
+                stringstream ss2;
+                ss2.str(line);
+                ss2>> temp; // table
+                ss2>> temp;
+                
+                vector<float> curr_CPT;
+                while(temp.compare(";")!=0)
+                {
+                    curr_CPT.push_back(atof(temp.c_str()));
+                    ss2>>temp;
+                }
+                if(Data_Taken)
+                {
+                    vector<float> expert_CPT = listIt->get_CPT();
+                    
+                    //Calculate Net CPTs
+                    for(int ind=0;ind<curr_CPT.size();ind++)
+                    {
+                        curr_CPT[ind] = Weight*curr_CPT[ind] + (1.0-Weight) * expert_CPT[ind];
+                    }
+                }
+                listIt->set_CPT(curr_CPT);
+                
+            }
+            else if(temp.compare("Cases")==0)
+            {
+             
+                ss>>temp;
+                ss>>temp;
+                ss>>n2;
+                while ( n2[0] != ')'  && n2[0]!= ',')
+                {
+                    temp.append(" ");
+                    temp.append(n2);
+                    ss>>n2;
+                }
+                int nparams;
+                list<Graph_Node>::iterator listIt;
+                list<Graph_Node>::iterator listIt1;
+                listIt=Alarm.search_node(temp);
+                nparams = (listIt->get_nvalues() - 1);
+                int index=Alarm.get_index(temp);
+                //ss>>temp;
+                temp = n2;
+                values.clear(); // here values are actually parent nodes.
+                while(temp.compare(")")!=0)
+                {
+                    ss>>temp;
+                    ss>>n2;
+                    while(n2[0] != ',' && n2[0] != ')')
+                    {
+                        temp.append(" ");
+                        temp.append(n2);
+                        ss>>n2;
+                    }
+                    listIt1=Alarm.search_node(temp);
+                    listIt1->add_child(index);
+                    nparams *= listIt1->get_nvalues();
+                    values.push_back(temp);
+                    if(n2.compare(","))
+                        break;
+                }
+                listIt->set_Parents(values);
+                listIt->set_nparams(nparams);
+                getline (myfile,line);
+                stringstream ss2;
+                ss2.str(line);
+                ss2>> temp; // table
+                ss2>> temp;
+                
+                vector<int> curr_cases;
+                while(temp.compare(";")!=0)
+                {
+                    curr_cases.push_back(atof(temp.c_str()));
+                    ss2>>temp;
+                }
+                listIt->set_num_cases(curr_cases);
+
+                
+            }
+            else
+            {
+                //Do nothing, read next line
+            }
+            
+        }
+        
+        if(find==1)
+            myfile.close();
+    }
+    
+    return Alarm;
+    
+}
+
+
+int main(int argc, char* argv[])
+{
+    std::map<string, vs> SolSteps;
+    vs WorkHeadSteps;
+    WorkHeadSteps.push_back("Stop the machine");
+    WorkHeadSteps.push_back("Carefully disassemble the spindle");
+    WorkHeadSteps.push_back("Replace the component");
+    SolSteps["Workhead"] = WorkHeadSteps;
+    vs WheelHeadSteps;
+    WheelHeadSteps.push_back("Stop the machine");
+    WheelHeadSteps.push_back("Carefully disassemble the spindle");
+    WheelHeadSteps.push_back("Replace the component");
+    SolSteps["Wheelhead"] = WheelHeadSteps;
+    
+    
+    vs Causes, Symptoms;
+    
+    network Alarm;
+    Alarm=read_network(Causes, Symptoms, false, Alarm, "/Users/PranitArora/Desktop/Cleanup/TestCase.txt");
+    Alarm=read_network(Causes, Symptoms, true, Alarm, "/Users/PranitArora/Desktop/Cleanup/DataTestCase.txt");
+    nvars = Alarm.netSize();
+    cout<<"There are "<<nvars<<" nodes in the network. These are:\n";
+    for(int i=0;i<Alarm.netSize();i++)
+    {
+        list<Graph_Node>::iterator MyIt =  Alarm.get_nth_node(i);
+        cout<<i<<") "<<MyIt->get_name()<<", ";
+    }
+    cout<<endl;
+    // vs Symptoms;
+    // Symptoms.push_back("Workhead");
+    
+    // Symptoms.push_back("Wheelhead");
+    for(int i=0;i<Symptoms.size();i++)
+    {
+        cout<<Symptoms[i];
+    }
+    for(int i=0;i<Causes.size();i++)
+    {
+        cout<<Causes[i];
+    }
+    
+    vs DataPoint(Alarm.netSize(), "\"?\"");
+    string No ="";
+    while(No.compare("No") && No.compare("no") && No.compare("n") && No.compare("N"))
+    {
+        //Can put following code in a loop to recover multiple observables
+        cout<<"\nEnter name of observable"<<endl;
+        string ObsName;
+        cin>>ObsName;
+        while(Alarm.get_index(ObsName)== -1)
+        {
+            cout<<"The value you entered is not one of the nodes. Please try again.\n";
+            cin>>ObsName;
+        }
+        list<Graph_Node>::iterator ObsNode = Alarm.search_node(ObsName);
+        //Remove Cause if observed. ASSUMES Observed Node Is ALRIGHT
+        if(find(Causes.begin(), Causes.end(), ObsName) != Causes.end())
+        {
+            Causes.erase(remove(Causes.begin(), Causes.end(), ObsName), Causes.end());;
+        }
+        cout<<"The possible values for this are: \n";
+        vs ObsValues = ObsNode->get_values();
+        for(int i=0;i<ObsNode->get_nvalues();i++)
+        {
+            cout<<ObsValues[i]<<", ";
+        }
+        cout<<"\nEnter Value \n";
+        string ObsVal;
+        cin>>ObsVal;
+        
+        while(std::find(ObsValues.begin(), ObsValues.end(),ObsVal) == ObsValues.end())
+        {
+            cout<<"The value enter could not be found. \n";
+            cin>>ObsVal;
+        }
+        
+        DataPoint[Alarm.get_index(ObsName)] = ObsVal;
+        cout<<"Would you like to specify more observables? ";
+        cin>>No;
+        
+    }
+    bool found = false;
+    int num= 0;
+    vs Parents = Causes;
+    int ParSize = Parents.size();
+    string SolName;
+    while(!found && num< ParSize)
+    {
+        float maxProb = 0.0;
+        vector<vs> SampleSet = ProbabiltyEst(Alarm, DataPoint);
+        float Num; int Den;
+        for (int i=0;i<Parents.size();i++)
+        {
+            int index = Alarm.get_index(Parents[i]);
+            string Data = DataPoint[index];
+            list<Graph_Node>::iterator Parent_i = Alarm.search_node(Parents[i]);
+            vs ParVal = Parent_i->get_values();
+            if(Data.compare("\"?\"")==0)
+            {
+                float Prob;
+                //Prob = calcProb(Alarm, DataPoint, Alarm.search_node(Parents[i]))[0];
+                Num = countNum(SampleSet, Alarm.get_index(Parents[i]), ParVal[0]) + 1.0;
+                Den = Num_Loops + Parent_i->get_nvalues();
+                Prob = float(Num/Den);
+                
+                //Find max prob. diagnosis
+                if (Prob>maxProb)
+                {
+                    SolName = Parents[i];
+                    maxProb=Prob;
+                }
+            }
+        }
+        //create heap to get max again and again??
+        //Above, we have select one likely cause
+        //Below, we try to follow the solution steps for the cause
+        
+        //find corresponding solution from map of string to vector string
+        if(SolName == "")
+        {
+            return 2;
+        }
+        vs SolveSteps = SolSteps[SolName];
+        
+        cout<<"\nBased on the data so far, there problem may be with the "<<SolName<<". Follow the following Steps: \n";
+        string temp;
+        for(int i=0;i<SolveSteps.size();i++)
+        {
+            cin.get();
+            cout<<i+1 <<") "<<SolveSteps[i]<<". If complete, press enter";
+        }
+        cin.get();
+        cout<<"Has the problem been solved? Press Y(or y) if solved, else N(or n)";
+        cin>>temp;
+        if(temp.compare("Y") ==0 || temp.compare("y")==0)
+        {
+            found = true;
+            DataPoint[Alarm.get_index(SolName)] =  Alarm.search_node(SolName)->get_values()[1];
+            DataPoint = SetOtherCausesFalse (DataPoint, Alarm, Parents);
+            vector<vs> NewSample = ProbabiltyEst(Alarm, DataPoint);
+            DataPoint = Most_Likely_DP(DataPoint, NewSample, Alarm);
+            
+        }
+        else
+        {
+            num++;
+            DataPoint[Alarm.get_index(SolName)] =  Alarm.search_node(SolName)->get_values()[0];
+        }
+    }
+    if(found)
+    {
+        cout<<"Glad we could be of assistance.\n";
+    }
+    else
+    {
+        cout<<"Please consult MGTL expert for further assistance \n";
+    }
+    cout<<"Current Data Point: ";
+    for(int i=0;i<DataPoint.size();i++)
+    {
+        cout<<DataPoint[i]<<", ";
+    }
+    Alarm = update_CPT(Alarm, DataPoint);
+    write_network(Alarm, DataPoint);
+    
+    
+    
+    return 0;
+    
+}
+
+
+
+
+
+

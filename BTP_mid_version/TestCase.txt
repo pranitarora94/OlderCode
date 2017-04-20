@@ -1,0 +1,29 @@
+variable None Wheelhead Bearing {
+type discrete[2] { Up , Down };
+
+variable Cause Wheelhead {
+type discrete[2] { Up , Down };
+
+variable None Workhead Bearing {
+type discrete[2] { Up , Down  };
+
+variable Cause Workhead {
+type discrete[2] { Up , Down };
+
+variable Symptom Noise {
+type discrete[2] { Present , Absent };
+
+probability ( Wheelhead ) { 
+table 0.55 0.45 ; }
+
+probability ( Workhead ) { 
+table 0.2 0.8 ; }
+
+probability ( Wheelhead Bearing , Wheelhead ) { 
+table 0.3 0.4 0.7 0.6 ; }
+
+probability ( Workhead Bearing , Workhead ) { 
+table 0.25 0.65 0.75 0.35 ; }
+
+probability ( Noise , Wheelhead Bearing , Workhead Bearing ) { 
+table 0.12 0.35 0.79 0.97 0.88 0.55 0.21 0.03 ; }

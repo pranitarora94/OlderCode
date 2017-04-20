@@ -1,0 +1,60 @@
+
+
+
+
+module TLC ( output HG, HY, HR, FG, FY, FR, input C, reset, clk);
+
+	wire A, B, DA, DB, TS, TL, ST;
+	assign DA = ( ~A & B & TS | A & ~B & ~TL & C | A & ~B & TL | A & ~B & ~C | A & B & ~TS ) & ~reset ;
+	assign DB = ( ~A & ~B & TL & C | ~A & B & ~TS | A & ~B & TL | A & ~B & ~C | A & B & ~TS ) & ~reset ;
+	
+	timer T ( TS, TL, ST, clk);
+	
+	assign ST = ( ~A & ~B & TL & C | A & ~B & TL | A & ~B & ~C | ~A & ~B & TS | A & B & TS ) & ~reset ;
+
+	assign HG = ~A & ~B & ~C | ~A & ~B & ~TL | A & B & TS | reset ;
+	assign HY = ( ~A & ~B & TL & C | ~A & B & ~TS ) & ~reset ;
+	assign FG = ( ~A & B & TS | A & ~B & ~TL & C ) & ~reset ;
+	assign FY = ( A & ~B & TL | A & ~B & ~C | A & B & TS ) & ~reset ;
+	assign HR = FG | FY ;
+	assign FR = HG | HY ;
+	
+	DFF D1 ( A, DA, clk);
+	DFF D2 ( B, DB, clk);
+
+endmodule
+
+
+module timer ( output TS, TL, input ST, clk);
+
+	integer value;
+	assign TS = ( value >= 3 );
+	assign TL = ( value >= 9 );
+	always @ (posedge ST or posedge clk)
+		if (posedge ST)
+			value =0;
+		if (posedge clk)
+			value = value + 1;
+endmodule
+
+/*
+module timer ( output TS, TL, input ST, clk);
+
+	always @ (posedge clk)
+	if (ST == 1)
+		begin
+		TS = 0;
+		TL = 0;
+		#2 TS = 1;
+		#5 TL = 1;
+		end
+endmodule
+*/
+
+module DFF ( output reg Q, input D, clk);
+	
+	always @ (posedge clk)
+		Q <= D;
+
+endmodule
+
